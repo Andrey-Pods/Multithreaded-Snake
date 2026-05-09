@@ -1,0 +1,28 @@
+# Compiled objects
+*.o
+*.d
+
+# Executables
+bin/
+
+# Debug
+*.dSYM/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+compile_comamnds.json

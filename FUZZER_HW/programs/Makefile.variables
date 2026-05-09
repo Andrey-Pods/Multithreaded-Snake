@@ -1,0 +1,37 @@
+# === DO NOT MODIFY THIS FILE ===
+# This file include the default variable configurations.
+# 
+# Modifying this file may break the build system. During grading,
+# we will be replacing this file with our own copy. You have been
+# warned.
+# === DO NOT MODIFY THIS FILE ===
+
+# See $PROJECT_DIR/programs/README.md for details on how to
+# use this file.
+
+# Contains default variables for the build system
+
+CC = clang
+CXX = clang++
+
+CFLAGS ?= -std=c11 -MMD -MP -Wall -Werror -fsanitize-coverage=trace-pc-guard
+DFLAGS ?= -g -DDEBUG -DCOLOR
+LIBS ?= 
+EXTRA_CFLAGS ?= 
+
+# Check if POSIX is defined. If so, add POSIX source 
+ifeq ($(POSIX), y)
+	CFLAGS += -D_POSIX_SOURCE
+endif
+
+# Check if BSD is defined. If so, add BSD source
+ifeq ($(BSD), y)
+	CFLAGS += -D_DEFAULT_SOURCE
+endif
+
+# Check if GNU is defined. If so, add GNU source
+ifeq ($(GNU), y)
+	CFLAGS += -D_GNU_SOURCE
+endif
+
+CFLAGS += $(EXTRA_CFLAGS)
