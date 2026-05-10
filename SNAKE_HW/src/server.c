@@ -92,11 +92,93 @@ int server_init(server_t *server, int port, int board_size, int max_snakes, unsi
 	return 0;
 }
 
-// placeholder for the periodic game tick thread
+// implemented as a separate thread so it can run concurrently with client handlers
 void *server_game_loop(void *arg) {
-	/* game loop thread will be implemented later */
-	debug("server_game_loop stub called");
-	(void)arg;
+	server_t *server = (server_t *)arg;
+	uint8_t state_buf[GAME_STATE_BUF_SIZE];
+	uint8_t dead_buf[2];
+
+	if(server == NULL) {
+		debug("server_game_loop got NULL server");
+		return NULL;
+	}
+
+	while(server->running) {
+		int alive_before[MAX_PLAYERS] = {0};
+		int dead_ids[MAX_PLAYERS];
+		int dead_fds[MAX_PLAYERS];
+		int dead_count = 0;
+		int broadcast_fds[MAX_PLAYERS];
+		int broadcast_count = 0;
+		int game_state_len = -1;
+
+		usleep((unsigned int)TICK_INTERVAL_MS * 1000U);
+		if(!server->running) {
+			break;
+		}
+
+		if(pthread_mutex_lock(&server->board_mutex) != 0) {
+			debug("server_game_loop failed to lock board mutex");
+			continue;
+		}
+
+		/* remember who was alive before ticking */
+		for(int i = 0; i < server->board.max_snakes; i++) {
+			alive_before[i] = server->board.snakes[i].alive;
+		}
+
+		if(board_tick(&server->board) != 0) {
+			debug("server_game_loop: board_tick failed");
+			pthread_mutex_unlock(&server->board_mutex);
+			continue;
+		}
+
+		/* collect snakes that just died and their client fds */
+		for(int i = 0; i < server->board.max_snakes; i++) {
+			if(alive_before[i] && !server->board.snakes[i].alive) {
+				for(int slot = 0; slot < MAX_PLAYERS; slot++) {
+					if(server->client_snake_ids[slot] == i &&
+					   server->client_fds[slot] >= 0) {
+						dead_ids[dead_count] = i;
+						dead_fds[dead_count] = server->client_fds[slot];
+						dead_count++;
+						break;
+					}
+				}
+			}
+		}
+
+		game_state_len = protocol_serialize_game_state(state_buf, sizeof(state_buf),
+		                                              &server->board);
+
+		/* snapshot recipients so we can send after releasing lock */
+		for(int slot = 0; slot < MAX_PLAYERS; slot++) {
+			if(server->client_fds[slot] >= 0) {
+				broadcast_fds[broadcast_count++] = server->client_fds[slot];
+			}
+		}
+
+		pthread_mutex_unlock(&server->board_mutex);
+
+		/* notify clients whose snakes died this tick */
+		for(int i = 0; i < dead_count; i++) {
+			int dead_len =
+			    protocol_serialize_dead(dead_buf, sizeof(dead_buf), dead_ids[i]);
+
+			if(dead_len > 0) {
+				(void)send_all(dead_fds[i], dead_buf, (size_t)dead_len);
+			}
+		}
+
+		/* then broadcast the board state to all connected clients */
+		if(game_state_len > 0) {
+			for(int i = 0; i < broadcast_count; i++) {
+				(void)send_all(broadcast_fds[i], state_buf, (size_t)game_state_len);
+			}
+		}
+	}
+
+	debug("server_game_loop exited");
 	return NULL;
 }
 
